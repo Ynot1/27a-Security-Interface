@@ -53,7 +53,8 @@ Onboard relay1 = AlarmSet/Unset control
 Onboard relay2 = Panic Input or outside siren
 */
 
-byte VBNumber = 33;  // 33 is the watchdog post value for the 27A Security Interface
+byte VBNumber =40;  // 40 is the watchdog post value for the 27A Security Interface
+String VBNumberString =""; // also need a string as leading zero needed for later string matching accuracy
 
 const char* WatchDogHost = "192.168.1.60";  // ip address of the watchdog esp8266
 
@@ -287,7 +288,8 @@ void loop() {
   if (Sec27ASetState == LOW) {
     if (PrevSec27ASetState == HIGH) {
       Serial.println("27a security has just entered Set State");
-      VBNumber = 2;  // 27a Security Set code
+      VBNumber = 02;  // 27a Security Set code
+      VBNumberString = "02";
       ProxyPost();
       ProxyRequestText = "Alarm is Set";
       RotateProxyLogArray();
@@ -298,7 +300,8 @@ void loop() {
   if (Sec27ASetState == HIGH) {
     if (PrevSec27ASetState == LOW) {
       Serial.println("27a security has just enterted Unset State ");
-      VBNumber = 3;  // 27a Security Unset code
+      VBNumber = 03;  // 27a Security Unset code
+      VBNumberString = "03";
       ProxyPost();
       ProxyRequestText = "Alarm is UnSet";
       RotateProxyLogArray();
@@ -311,7 +314,8 @@ void loop() {
   if (Sec27ASoundingState == LOW) {
     if (PrevSec27ASoundingState == HIGH) {
       Serial.println("27a security  has just gone into the alarm sounding state ");
-      VBNumber = 4;  // 27a Security Sounding code
+      VBNumber = 04;  // 27a Security Sounding code
+      VBNumberString = "04";
       ProxyPost();
       ProxyRequestText = "Alarm is Sounding";
       RotateProxyLogArray();
@@ -344,7 +348,7 @@ void loop() {
   if (WatchDogLoopCounter > WatchDogCounterLoopThreshold) {
     //PanelBuzzerCount = (PanelBuzzerCountThreshold - 4);
     WatchDogLoopCounter = 0;
-    VBNumber = 33;  // 27A security watchdog code
+    VBNumber = 40;  // 27A security watchdog code
     WatchDogPost();
   }
 
@@ -509,13 +513,28 @@ void loop() {
       currenthours = 0;
       ProxyRequestText = "Midnight Rollover";
       RotateProxyLogArray();
-      SetTime();  // resync the clock
+      //SetTime();  // resync the clock
  
 
       //UpTimeDays = UpTimeDays + 0.5; IDK why but it sometimes counts 2X at this point
     }
 
-  }  // end 1 second
+    //Detect 09:45 and resync the RTC
+if (currenthours == 9) {
+    if (currentminutes == 45) {
+        if (currentseconds == 0){
+
+            ProxyRequestText = "Its 09:45, as good time as any to resync";
+             RotateProxyLogArray();
+            SetTime(); // resync the clock
+            currentseconds = 1; //make sure this only runs once
+        }
+    }
+
+}
+
+}  // end 1 second
+
 
   // Check if the AlarmSetLockout needs to be released
 
@@ -785,8 +804,8 @@ void ProxyPost() {
   // 2 is Burglar Alarm has Seted
   // 3 is Burglar Alarm is Unset
   // 4 is Burglar Alarm Sounding
-  Serial.print("Requesting POST to WatchDog ");
-  Serial.println(VBNumber);
+  Serial.print("Requesting POST to Proxy ");
+  Serial.println(VBNumberString);
 
   WiFiClient client;
   const int httpPort = 80;
@@ -800,7 +819,13 @@ void ProxyPost() {
   // Send request to the server:
   client.println("POST / HTTP/1.1");
   //Serial.println("VB button"+(String(VBNumber))+" request sent");
+/*
+// this gave problems as the data transmitted had no leading zero and the watchdog falsely matched it with values in the 30 range
   client.println("Host: ProxyRequest" + (String(VBNumber)));  // this endpoint value gets to the server and is used to transfer the identity of the calling slave
+  Serial.println("Host: ProxyRequest" + (String(VBNumber)));  //
+*/
+  client.println("Host: ProxyRequest" + VBNumberString);  // this endpoint value gets to the server and is used to transfer the identity of the calling slave
+  Serial.println("Host: ProxyRequest" + VBNumberString);  // send to serial port as well
   client.println("Accept: */*");                              // this gets to the server!
   client.println("Content-Type: application/x-www-form-urlencoded");
   client.print("Content-Length: ");
@@ -822,8 +847,8 @@ void WatchDogPost() {
   TwitchLED();
 
   // assumes VBNumber set to desired VB call to be made
-
-  // 33 is Burglar Alarm watchdog
+VBNumber = 40;  // 27A security watchdog code
+  // 40 is Burglar Alarm watchdog
 
   Serial.print("Requesting POST to WatchDog ");
   Serial.println(VBNumber);
@@ -839,7 +864,7 @@ void WatchDogPost() {
 
   // Send request to the server:
   client.println("POST / HTTP/1.1");
-  //Serial.println("VB button"+(String(VBNumber))+" request sent");
+  Serial.println("VB button"+(String(VBNumber))+" request sent");
   client.println("Host: WatchDog Endpoint" + (String(VBNumber)));  // this endpoint value gets to the server and is used to transfer the identity of the calling slave
   client.println("Accept: */*");                                   // this gets to the server!
   client.println("Content-Type: application/x-www-form-urlencoded");
